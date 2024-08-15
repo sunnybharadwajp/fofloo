@@ -1,18 +1,12 @@
-import { login } from '@/actions/user_actions';
+import LoginForm from './LoginForm';
 
 export default function LoginPage() {
 	return (
 		<>
-			<h1>Sign in</h1>
-			<form action={login}>
-				<label htmlFor="username">Username</label>
-				<input name="username" id="username" />
-				<br />
-				<label htmlFor="password">Password</label>
-				<input type="password" name="password" id="password" />
-				<br />
-				<button>Continue</button>
-			</form>
+			<div className="form-block max-w-sm mx-auto mt-6">
+				<h1 className="text-2xl font-semibold tracking-tight mb-4 ">Sign in</h1>
+				<LoginForm />
+			</div>
 		</>
 	);
 }

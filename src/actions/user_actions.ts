@@ -1,18 +1,17 @@
 'use server';
 
-import prisma from '@/lib/prisma';
-import { lucia } from '@/lib/auth';
 import { hash } from '@node-rs/argon2';
-import { verify } from '@node-rs/argon2';
+import { generateIdFromEntropySize } from 'lucia';
+import { lucia } from '@/lib/auth';
+import { validateRequest } from '@/lib/auth/validate_request';
+import prisma from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { generateIdFromEntropySize } from 'lucia';
-import { validateRequest } from '@/lib/auth';
+import { verify } from '@node-rs/argon2';
 
 export async function signup(formData: FormData) {
 	const username = formData.get('username');
-	// username must be between 4 ~ 31 characters, and only consists of lowercase letters, 0-9, -, and _
-	// keep in mind some database (e.g. mysql) are case insensitive
+
 	if (
 		typeof username !== 'string' ||
 		username.length < 3 ||
@@ -23,7 +22,9 @@ export async function signup(formData: FormData) {
 			error: 'Invalid username',
 		};
 	}
+
 	const password = formData.get('password');
+
 	if (typeof password !== 'string' || password.length < 6 || password.length > 255) {
 		return {
 			error: 'Invalid password',
@@ -37,34 +38,39 @@ export async function signup(formData: FormData) {
 		outputLen: 32,
 		parallelism: 1,
 	});
-	const userId = generateIdFromEntropySize(10); // 16 characters long
 
-	console.log('here');
-	// TODO: check if username is already used
+	const userId = generateIdFromEntropySize(10);
+
+	// Check if username is already used
 	const existingUser = await prisma.user.findUnique({
-		where: {
-			username: username.toLowerCase(),
-		},
+		where: { username: username },
 	});
 
 	if (existingUser) {
 		return {
-			error: 'Username already exists',
+			error: 'Username already taken',
 		};
 	}
 
-	await prisma.user.create({
-		data: {
-			email: '',
-			username: username,
-			password_hash: passwordHash,
-		},
-	});
+	try {
+		const dbResponse = await prisma.user.create({
+			data: {
+				id: userId,
+				username: username,
+				password_hash: passwordHash,
+			},
+		});
+	} catch (error) {
+		console.error(error);
+		return {
+			error: 'An error occurred',
+		};
+	}
 
-	const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-	const session = await lucia.createSession(userId, { expiresAt });
+	const session = await lucia.createSession(userId, {});
 	const sessionCookie = lucia.createSessionCookie(session.id);
 	cookies().set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
+
 	return redirect('/');
 }
 
@@ -87,19 +93,21 @@ export async function login(formData: FormData) {
 		};
 	}
 
+	// Find the user by username using Prisma
 	const existingUser = await prisma.user.findUnique({
 		where: {
 			username: username.toLowerCase(),
 		},
 	});
+
 	if (!existingUser) {
+		// Same security note as before regarding timing attacks
 		return {
 			error: 'Incorrect username or password',
 		};
 	}
 
-	console.log(existingUser);
-
+	// Verify the password
 	const validPassword = await verify(existingUser.password_hash, password, {
 		memoryCost: 19456,
 		timeCost: 2,
@@ -111,17 +119,19 @@ export async function login(formData: FormData) {
 			error: 'Incorrect username or password',
 		};
 	}
-	const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-	const session = await lucia.createSession(existingUser.id, { expiresAt });
+
+	// Create a session using Lucia
+	const session = await lucia.createSession(existingUser.id, {});
+
+	// Create and set the session cookie
 	const sessionCookie = lucia.createSessionCookie(session.id);
 	cookies().set(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
-	console.log('login success');
-	redirect('/');
+
+	// Redirect to the home page
 	return redirect('/');
 }
 
 export async function logout() {
-	'use server';
 	const { session } = await validateRequest();
 	if (!session) {
 		return {

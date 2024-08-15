@@ -1,3 +1,5 @@
+import { logout } from '@/actions/user_actions';
+
 const SiteNavbarComponent = () => {
 	return (
 		<div>
@@ -19,7 +21,9 @@ const SiteNavbarComponent = () => {
 						<a href="/signup">Sign Up</a>
 					</li>
 					<li className="navbar-item">
-						<a href="/api/user/logout">Log Out</a>
+						<form action={logout}>
+							<button>Sign out</button>
+						</form>
 					</li>
 					<li className="navbar-item">
 						<a href="/user/cart">Cart</a>
